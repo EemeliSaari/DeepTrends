@@ -2,97 +2,56 @@
 
 import os
 import random
+import sys
 
-import requests
 import bs4 as bs
+import requests
 
-from utils.coroutines import run_coroutines
+sys.path.append('..')
 
+from base import BaseFetcher
 
 BASE_URL = 'http://openaccess.thecvf.com/'
-LATEST_YEAR = 2018
 
 
-def fetch_all(output_path : str):
-    """All Open access papers for CVPR
-
-    Small wrapper to fetch all available papers
-
-    Parameters
-    ----------
-    output_path : string, path-like
-        Path to save files into.
+class CVPRFetcher(BaseFetcher):
     """
-    for year in range(2013, LATEST_YEAR + 1, 1):
-        fetch(year=year, output_path=output_path)
 
-
-def fetch(year : int, output_path : str, save_dir : bool = True, sample_size : int = 0):
-    """Fetch API for CVPR
-
-    Download the published papers for given year in pdf format.
-
-    Parameters
-    ----------
-    year : int, 2013 <= year <= 2018
-        Year of the conference specified. 
-    output_path : string, path-like
-        Path to save files into.
-    save_dir : bool, (optional) 
-        Wheter or not save the papers under directory.
-    sample_size : int, (optional), default=0
-        Sample size to be used.
     """
-    if not os.path.exists(output_path):
-        os.mkdir(output_path)
+    url = 'http://openaccess.thecvf.com/'
+    prefix = 'CVPR{}'
+    latest = 2018
 
-    session_name = 'CVPR{:d}'.format(year)
+    def __init__(self, save_dir : bool=True):
+        super(CVPRFetcher, self).__init__(save_dir=save_dir)
 
-    dir_path = output_path
-    if save_dir:
-        dir_path = os.path.join(output_path, session_name)
-        if not os.path.exists(dir_path):
-            os.mkdir(dir_path)
+    def fetch(self, year : int, output_path : str):
+        """Fetch API for CVPR
 
-    url = BASE_URL+session_name+'.py'
-    res = requests.get(url=url)
-    if res.status_code is not 200:
-        raise ValueError('Fetch failed with status code: {:d}'.format(res.status_code))
+        Download the published papers for given year in pdf format.
 
-    soup = bs.BeautifulSoup(res.text, 'lxml')
-    links = [BASE_URL+x['href'] for x in soup.findAll('a', href=True) if 'pdf' in x]
+        Parameters
+        ----------
+        year : int, 2013 <= year <= 2018
+            Year of the conference specified. 
+        output_path : string, path-like
+            Path to save files into.
+        """
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
 
-    if not links:
-        raise ValueError('Did not find any pdf documents from {:s}'.format(url))
+        save_path = self._create_output(output_path, year)
 
-    if len(links) > sample_size > 0:
-        links = random.sample(links, sample_size)
+        res = self.make_request(url=self.url+self.prefix.format(year)+'.py')
 
-    coroutines = [get_link_content(l, dir_path) for l in links]
-    results = run_coroutines(*coroutines)
-    #TODO: Check and rerun failed ones.
+        soup = bs.BeautifulSoup(res.text, 'lxml')
+        links = [BASE_URL+x['href'] for x in soup.findAll('a', href=True) if 'pdf' in x]
 
+        if not links:
+            raise ValueError(f'Did not find any pdf documents for year {year}')
 
-async def get_link_content(link : str, path : str):
-    """Async link content fetcher.
+        self.fetch_link_content(path=save_path, *links)
 
-    Downloads the link content and saves it to the given path.
-
-    Parameters
-    ----------
-    link : str, url-like
-        URL for the content to be downloaded
-    path : str, path-like
-        Path for the content to be saved into.
-    """
-    filename = link.split('/')[-1]
-    filepath = os.path.join(path, filename)
-    if os.path.exists(filepath):
-        return
-
-    with requests.get(url=link, stream=True) as res:
-        with open(filepath, 'wb') as f:
-            for chunk in res.iter_content(chunk_size=1024):
-                if chunk:
-                    f.write(chunk)
-                    f.flush()
+    @property
+    def years(self):
+        return list(range(2013, self.latest+1))
