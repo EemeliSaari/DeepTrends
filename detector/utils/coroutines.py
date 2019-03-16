@@ -1,11 +1,30 @@
 import asyncio
 
 
-def run_coroutines(*args):
+def loop_wrapper(func):
+    """
 
-    loop = asyncio.new_event_loop()
-    tasks = [loop.create_task(cr) for cr in args]
-    loop.run_until_complete(asyncio.wait(tasks))
-    loop.close()
+    """
+    def wrapper(*args):
+        loop = asyncio.new_event_loop()
+        try:
+            results = loop.run_until_complete(func(*args))
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        finally:
+            loop.close()
+        return results
+    return wrapper
 
-    return tasks
+
+@loop_wrapper
+async def run_coroutines(*args):
+    """Coroutine runner
+
+    Waits for given coroutines to finish.
+
+    Parameters
+    ----------
+    args : tuple of coroutines
+        List of coroutines to be run.
+    """
+    return await asyncio.gather(*args)
