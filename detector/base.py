@@ -3,6 +3,7 @@ import os
 
 import requests
 from filelock import FileLock
+from sklearn.base import TransformerMixin
 
 from fetcher.processes import get_link_content
 from utils.coroutines import run_coroutines
@@ -75,7 +76,7 @@ class BaseFetcher(_Base):
         return dir_path
 
 
-class BaseModel(_Base):
+class BaseModel(_Base, TransformerMixin):
     """
 
     """
@@ -94,7 +95,7 @@ class BaseModel(_Base):
             value = getattr(self.obj, attr)
         else:
             raise AttributeError(f'Attribute {attr} not found!')
-        
+
         if callable(value):
             def hook(*args, **kwargs):
                 """
@@ -107,3 +108,6 @@ class BaseModel(_Base):
             return hook
         else:
             return value
+
+    def __dir__(self):
+        return list(set(super(BaseModel, self).__dir__()).union(set(dir(self.obj))))
