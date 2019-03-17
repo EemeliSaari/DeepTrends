@@ -5,7 +5,8 @@ import sys
 import subprocess
 import hashlib
 
-from gensim import parsing 
+sys.path.append('..')
+
 from pdfminer.converter import TextConverter
 from pdfminer.layout import LAParams
 from pdfminer.pdfinterp import PDFPageInterpreter, PDFResourceManager
@@ -135,20 +136,5 @@ def parse_all_pdf(path : str, outpath : str, engine : str):
     run_coroutines(*coroutines)
 
 
-def custom_preprocess(doc):
-    """
-
-    """
-    as_lower = lambda doc: doc.lower()
-    filters = [
-        parsing.strip_tags,
-        parsing.strip_punctuation,
-        parsing.strip_multiple_whitespaces,
-        parsing.strip_numeric,
-        as_lower,
-        parsing.remove_stopwords,
-    ]
-    for f in filters:
-        doc = f(doc)
-    doc = parsing.strip_short(doc, minsize=2)
-    return doc.split(' ')
+if __name__ == '__main__':
+    parse_all_pdf('../../data/papers/', '../../data/parsed', 'pdf2text')
