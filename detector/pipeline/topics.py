@@ -1,3 +1,4 @@
+import collections
 import itertools
 import logging
 
@@ -10,8 +11,6 @@ from base import BaseModel
 
 try:
     from HDP.models import HDP
-    from HDP.util.general import sgd_passes
-    from HDP.util.text import progprint
     from core.core_distributions import vonMisesFisherLogNormal as vMF
 except ImportError:
     logging.warn('Could not import modules for sHDP')
@@ -52,7 +51,7 @@ class SHDPWrapper(BaseModel):
                  gamma : int=2, sigma_0 : float=0.25, tau : float=0.8,
                  C_0 : int=1, m_0 : int=2, kappa_sgd : float=0.6, 
                  batch_size : int=10, n_passes : int=1, num_docs : int=None, 
-                 seed : int=42, **kwargs):
+                 seed : int=42, vector_map=None, **kwargs):
         self.__n_topics = n_topics
         self.__dim = dim
         self.__alpha = alpha
@@ -66,6 +65,7 @@ class SHDPWrapper(BaseModel):
         self.__n_passes = n_passes
         self.__num_docs = num_docs
         self.__seed = seed
+        self.vector_map = vector_map
 
         self._initialize_components()
 
@@ -81,7 +81,7 @@ class SHDPWrapper(BaseModel):
     def validate_parameters(self):
         if not 0.5 < self.__kappa_sgd <= 1:
             raise ValueError(f'Parameter kappa_sgd {self.__kappa_sgd} is invalid')
-        
+    
         if not self.__tau >= 0:
             raise ValueError(f'Parameter tau {self.__tau} is invalid.')
 
@@ -89,36 +89,34 @@ class SHDPWrapper(BaseModel):
         """
 
         """
-        for doc, N in X:
-            for data, rho_t in self._sgd_passes(doc):
-                self.obj.meanfield_sgdstep(
-                    minibatch=data, 
-                    minibatchfrac=np.array(data).shape[0] / N,
-                    stepsize=rho_t
-                )
+        for (doc, N), rho_t in zip(self.glovize(X), self._sgd_steps()):
+            self.obj.meanfield_sgdstep(
+                doc,
+                np.array(doc).shape[0] / np.float(N),
+                rho_t
+            )
 
         self.fitted_ = True
-
         return self
 
     def transform(self, X):
 
-        self.__doc_states = np.empty((len(X), self.__n_topics))
-        for i in range(self.__doc_states.shape[0]):
-            self.obj.add_data(np.atleast_2d(X[i][0].squeeze()), i)
-            self.obj.states_list[-1].meanfieldupdate()
-            self.__doc_states[:, :] = self.obj.states_list[-1].all_expected_stats[0] 
+        self.__doc_states = []
 
-        return self.tokens()
+        for i, (doc, N) in enumerate(self.glovize(X)):
+            self.obj.add_data(np.atleast_2d(doc[0].squeeze()), i)
+            self.obj.states_list[-1].meanfieldupdate()
+            self.__doc_states.append(self.obj.states_list[-1].all_expected_stats[0])
+
+        return self.topics()
 
     def topics(self):
         """
 
         """
-
-        topic_dist = np.empty((len(X), hdp.num_states))
-        for i in range(self.__doc_states.shape[0]):
-            topic_dist[i, :] = np.average(self.__doc_states[i, :], 0)
+        topic_dist = np.empty((len(self.__doc_states), self.obj.num_states))
+        for i in range(topic_dist.shape[0]):
+            topic_dist[i, :] = np.average(self.__doc_states[i], 0)
         return topic_dist
 
     def topic_words(self, n_words=15):
@@ -126,21 +124,36 @@ class SHDPWrapper(BaseModel):
 
         """
         topics_dict = {}
-        for i in range(hdp.num_states):
+        for i in range(self.obj.num_states):
             topics_dict[i] = collections.defaultdict(float)
 
-        #TODO: Track the words!
-        for doc in self.__words:
+        for i, doc in enumerate(self.__words):
+            state = self.__doc_states[i]
             for idx, word_id in enumerate(doc):
-                for t in range(K):
-                    topics_dict[t][word_id] += temp_exp[idx, t]
+                for t in range(self.obj.num_states):
+                    topics_dict[t][word_id] += state[idx, t]
 
         sorted_topic_words = []
-        for t in range(K):
-            top_words = [dictionary[k] for k in sorted(topics_dict[t], key=lambda x: topics_dict[t][x], reverse=True)[:n_words]]
+        for t in range(self.obj.num_states):
+            top_words = [k for k in sorted(topics_dict[t], key=lambda x: topics_dict[t][x], reverse=True)[:n_words]]
             sorted_topic_words.append(top_words)
 
-        return np.array(sorted_topic_words)
+        return sorted_topic_words
+
+    def glovize(self, bow):
+        if not hasattr(self, 'vector_map'):
+            raise AssertionError('Cant glovize without vector map.')
+
+        self.__words = [] # Keep the count for the upcoming words.
+
+        for i, (doc_bow, N) in enumerate(bow):
+            bow_vectors = []
+            words = []
+            for word, count in doc_bow:
+                bow_vectors.append((self.vector_map[word].values, count))
+                words.append(word)
+            self.__words.append(np.array(words))
+            yield (np.array(bow_vectors), i), N
 
     def _initialize_components(self):
         """
@@ -148,11 +161,14 @@ class SHDPWrapper(BaseModel):
         """
         np.random.seed(self.__seed)
 
-        d = np.random.rand(self.__dim,)
+        d = np.random.rand(self.__dim)
         d = d/np.linalg.norm(d)
 
         obs_hypparams = dict(
-            mu_0=d, C_0=self.__C_0, m_0=self.__m_0, sigma_0=self.__sigma_0
+            mu_0=d,
+            C_0=self.__C_0,
+            m_0=self.__m_0,
+            sigma_0=self.__sigma_0
         )
         self.__components_0 = [vMF(**obs_hypparams) for _ in range(self.__n_topics)]
 
@@ -162,24 +178,6 @@ class SHDPWrapper(BaseModel):
         """
         for c in itertools.count(1):
             yield (c + self.__tau)**(-self.__kappa_sgd)
-
-    def _sgd_passes(self, X):
-        """
-
-        """
-        N = len(X)
-        print(N)
-
-        for itr in range(self.__n_passes):
-            perm = np.random.permutation(N)
-
-            if self.__batch_size == 1:
-                for idx, rho_t in zip(perm,self._sgd_steps()):
-                    yield X[idx], rho_t
-            else:
-                minibatch_indices = np.array_split(perm, N/self.__batch_size)
-                for indices, rho_t in zip(minibatch_indices, self._sgd_steps()):
-                    yield [X[idx] for idx in indices], rho_t
 
 
 def corpus_topics(topics, corpus):
