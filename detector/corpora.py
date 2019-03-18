@@ -26,7 +26,6 @@ class Corpora:
 
         iter_map = dict(
             token=self.tokenize,
-            glovize=self.glovize,
             bow=self.bowize
         )
         self.iterator = iter_map[iterator]
@@ -84,6 +83,8 @@ class Corpora:
         for c in self.corpus:
             self.dictionary.add_documents(c.tokens)
             c.clear()
+        
+        return self
 
     def clear(self):
         """
@@ -98,14 +99,6 @@ class Corpora:
         for doc_tokens, N in self.tokenize():
             yield self.dictionary.doc2bow(doc_tokens), N
 
-    def glovize(self):
-        if not hasattr(self, 'vector_map'):
-            raise AssertionError('Cant glovize without vector map.')
-
-        for i, (doc_bow, N) in enumerate(self.bowize()):
-            bow_vectors = [(self.vector_map[self.dictionary[v[0]]].values, v[1]) for v in doc_bow]
-            yield (np.array(bow_vectors), i), N
-
     def tokenize(self):
         """
 
@@ -118,16 +111,29 @@ class Corpora:
                 yield doc_tokens, len(self)
             c.clear()
 
+    def documents(self):
+        """
+
+        """
+        for c in self.corpus:
+            if len(c) > 1:
+                yield c.documents
+            else:
+                for doc in c.documents:
+                    yield doc
+
     @property
     def years(self):
         """
 
         """
         return sorted([int(c.year) for c in self.corpus])
-
+        
 
 class Corpus:
+    """
 
+    """
     PARSERS = dict(gensim=preprocess_string, simple=custom_preprocess)
     n_docs = 0
     is_loaded = False
@@ -154,6 +160,9 @@ class Corpus:
         return f'{self.__class__.__name__}(loaded={self.is_loaded}, n_documents={self.n_docs})'
 
     def load(self):
+        """
+
+        """
         if os.path.isdir(self.path):
             self.__documents = os.listdir(self.path)
             self.__docs = list(self._read_folder())
@@ -167,7 +176,9 @@ class Corpus:
         return self
 
     def clear(self):
-        
+        """
+
+        """
         if not self.keep_documents:
             self.n_docs = 0
             self.__docs = []
@@ -177,10 +188,16 @@ class Corpus:
 
     @property
     def documents(self):
+        """
+
+        """
         return self.__docs
 
     @property
     def tokens(self):
+        """
+
+        """
         start = time.time()
         self.__tokens = list(map(self.PARSERS[self.__parsing_method], self.documents))
         logging.info('Corpora tokens took: {:.5f}s'.format(time.time()-start))
@@ -188,15 +205,27 @@ class Corpus:
 
     @property
     def id2doc(self):
+        """
+
+        """
         return self.__documents
 
     @property
     def year(self):
+        """
+
+        """
         return re.findall('\d+', self.path)[-1]
 
     def _read_folder(self):
+        """
+
+        """
         return map(lambda f: self._read_file(os.path.join(self.path, f)), self.__documents)
 
     def _read_file(self, path):
+        """
+
+        """
         with open(path, 'r', encoding=self.encoding) as f:
-            return ''.join(f.readlines())
+            return f.read()
