@@ -22,8 +22,8 @@ class NIPSFetcher(BaseFetcher):
     url = 'http://papers.nips.cc/'
     prefix = 'NIPS{}'
 
-    def __init__(self, save_dir : bool=True):
-        super(NIPSFetcher, self).__init__(self, save_dir=save_dir)
+    def __init__(self, save_dir : bool=True, use_async : bool=True):
+        super(NIPSFetcher, self).__init__(save_dir=save_dir)
 
         self.__year_map = self.find_years()
 
