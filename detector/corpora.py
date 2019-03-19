@@ -1,28 +1,30 @@
 import collections
+import itertools
 import logging
 import os
-import time
 import re
+import time
 
 import numpy as np
 import pandas as pd
 from filelock import FileLock
-from gensim.parsing import preprocess_string
-from pipeline.preprocess import custom_preprocess
 from gensim.corpora.dictionary import Dictionary
+from gensim.parsing import preprocess_string
+
+from pipeline.preprocess import custom_preprocess
 
 
 class Corpora:
     """
 
     """
-    dictionary = Dictionary()
     is_built = False
 
     def __init__(self, data_path : str, prefix : str=None, 
-                 iterator : str='token', vector_map_path : str=None, 
-                 parsing : str='simple', shuffle : bool=False,
-                 seed : int=42):
+                 iterator : str='token', parsing : str='simple',
+                 word_up_limit : float=0.5, word_low_limit : int=5,
+                 dictionary : str=None, shuffle : bool=False, seed : int=42,
+                 document_minimum_length : int=5):
 
         iter_map = dict(
             token=self.tokenize,
@@ -31,12 +33,19 @@ class Corpora:
         self.iterator = iter_map[iterator]
         self.corpus = self.init_corpus(data_path, prefix, parsing)
 
-        if vector_map_path:
-            self.vector_map = self.load_vectors(vector_map_path)
+        self.word_low_limit = word_low_limit
+        self.word_up_limit = word_up_limit
+        if not dictionary:
+            self.dictionary = Dictionary()
+        else:
+            self.dictionary = Dictionary.load_from_text(dictionary)
+            self.is_built = True
 
         self.shuffle = shuffle
         if self.shuffle:
             np.random.seed(seed)
+
+        self.document_minimum_length = document_minimum_length
 
     def __enter__(self):
         self.build()
@@ -52,6 +61,9 @@ class Corpora:
     def __len__(self):
         return sum([c.n_docs for c in self.corpus])
 
+    def __getitem__(self, key):
+        return self.iterator(index=key)
+
     def init_corpus(self, path : str, prefix : str, parsing : str):
         """
 
@@ -61,7 +73,10 @@ class Corpora:
         if prefix:
             folders = list(filter(lambda p: prefix in p, folders))
 
-        return [Corpus(path=p, parsing=parsing).load() for p in folders]
+        corpus = [Corpus(path=p, parsing=parsing).load() for p in folders]
+        self.__paths = {c.path: c for c in corpus}
+
+        return corpus
 
     def load_vectors(self, path : str):
         """
@@ -83,7 +98,9 @@ class Corpora:
         for c in self.corpus:
             self.dictionary.add_documents(c.tokens)
             c.clear()
-        
+
+        self.dictionary.filter_extremes(no_below=self.word_low_limit, no_above=self.word_up_limit)
+
         return self
 
     def clear(self):
@@ -92,26 +109,31 @@ class Corpora:
         """
         self.dictionary = Dictionary()
 
-    def bowize(self):
+    def bowize(self, index=None):
         """
 
         """
-        for doc_tokens, N in self.tokenize():
+        for doc_tokens, N in self.tokenize(index=index):
             yield self.dictionary.doc2bow(doc_tokens), N
 
-    def tokenize(self):
+    def tokenize(self, index=None):
         """
 
         """
         if self.shuffle:
-            np.random.shuffle(self.corpus)
+            np.random.shuffle(self.corpus) #TODO: Handle with np.random.permutations
 
-        for c in self.corpus:
-            for doc_tokens in c.tokens:
-                yield doc_tokens, len(self)
+        N = len(self)
+
+        for c in self._iterator(index):
+            for i, doc_tokens in enumerate(c.tokens):
+                if len(doc_tokens) > self.document_minimum_length:
+                    yield doc_tokens, N
+                else:
+                    logging.warn(f'Received empty file at {c.documents[i]}, skipping.')
             c.clear()
 
-    def documents(self):
+    def documents(self, index=None):
         """
 
         """
@@ -128,7 +150,16 @@ class Corpora:
 
         """
         return sorted([int(c.year) for c in self.corpus])
-        
+
+    def _iterator(self, index=None):
+        iterator = self.corpus
+        if index:
+            if isinstance(index, int):
+                iterator = [self.corpus[index]] #TODO: Handle indices as slice
+            elif isinstance(index, str):
+                iterator = [self.__paths[index]]
+        return iterator
+
 
 class Corpus:
     """
@@ -187,11 +218,18 @@ class Corpus:
             self.__tokens = []
 
     @property
-    def documents(self):
+    def raw(self):
         """
 
         """
         return self.__docs
+
+    @property
+    def documents(self):
+        """
+
+        """
+        return self.__documents
 
     @property
     def tokens(self):
@@ -199,7 +237,7 @@ class Corpus:
 
         """
         start = time.time()
-        self.__tokens = list(map(self.PARSERS[self.__parsing_method], self.documents))
+        self.__tokens = list(map(self.PARSERS[self.__parsing_method], self.raw))
         logging.info('Corpora tokens took: {:.5f}s'.format(time.time()-start))
         return self.__tokens
 
