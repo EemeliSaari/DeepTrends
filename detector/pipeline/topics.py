@@ -2,12 +2,14 @@ import collections
 import itertools
 import logging
 
+import mock
 import numpy as np
 import pandas as pd
 from gensim.models.ldamulticore import LdaModel
 
 from base import BaseModel
-#from utils.namings import topic_columns
+from mocks.shdp_mocks import vmf_init
+from utils.namings import topic_columns
 
 try:
     from HDP.models import HDP
@@ -21,6 +23,47 @@ class LDAWrapper(BaseModel):
 
     """
     obj = LdaModel
+
+    def __init__(self, num_topics : int=100, alpha='auto', iterations : int=500, 
+                 update_every : int=0, passes : int=100, eval_every=None, 
+                 chunksize : int=2000, batch_size : int=10, verbose : bool=False,
+                 **kwargs):
+        self.__chunksize = chunksize
+        self.__passes = passes
+        self.__iterations = iterations
+        self.__eval_every = eval_every
+        self.__update_every = update_every
+        self.batch_size = batch_size
+        self.verbose = verbose
+
+        super(LDAWrapper, self).__init__(
+            alpha=alpha,
+            eval_every=eval_every,
+            num_topics=num_topics,
+            update_every=self.__update_every,
+            **kwargs)
+
+    def fit(self, X, y=None):
+        batch = []
+        for i, (doc, N) in enumerate(X):
+            batch.append(doc)
+            if i == N - 1:
+                pass
+            elif len(batch) < self.batch_size:
+                continue
+            if self.verbose:
+                print(f'Document {i+1}/{N}')
+            self.obj.update(
+                corpus=batch,
+                passes=self.__passes,
+                chunksize=self.__chunksize,
+                iterations=self.__iterations
+            )
+            batch = []
+
+        self.fitted_ = True
+
+        return self
 
     def corpus_to_topics(self, corpus):
         """
@@ -40,18 +83,19 @@ class LDAWrapper(BaseModel):
         return np.array(words)
 
 
+@mock.patch('sHDP.core.core_distributions.vonMisesFisherLogNormal.__init__', vmf_init)
 class SHDPWrapper(BaseModel):
     """
 
     """
 
-    obj = HDP
-
     def __init__(self, n_topics : int=100, dim : int=100, alpha : int=1, 
                  gamma : int=2, sigma_0 : float=0.25, tau : float=0.8,
                  C_0 : int=1, m_0 : int=2, kappa_sgd : float=0.6, 
                  batch_size : int=10, n_passes : int=1, num_docs : int=None, 
-                 seed : int=42, vector_map=None, **kwargs):
+                 seed : int=42, vector_map=None, verbose : bool=False,
+                 **kwargs):
+        self.obj = HDP
         self.__n_topics = n_topics
         self.__dim = dim
         self.__alpha = alpha
@@ -61,11 +105,13 @@ class SHDPWrapper(BaseModel):
         self.__C_0 = C_0
         self.__m_0 = m_0
         self.__kappa_sgd = kappa_sgd
-        self.__batch_size = batch_size
         self.__n_passes = n_passes
         self.__num_docs = num_docs
         self.__seed = seed
+
         self.vector_map = vector_map
+        self.verbose = verbose
+        self.batch_size = batch_size
 
         self._initialize_components()
 
@@ -97,6 +143,7 @@ class SHDPWrapper(BaseModel):
             )
 
         self.fitted_ = True
+
         return self
 
     def transform(self, X):
@@ -104,6 +151,7 @@ class SHDPWrapper(BaseModel):
         self.__doc_states = []
 
         for i, (doc, N) in enumerate(self.glovize(X)):
+ 
             self.obj.add_data(np.atleast_2d(doc[0].squeeze()), i)
             self.obj.states_list[-1].meanfieldupdate()
             self.__doc_states.append(self.obj.states_list[-1].all_expected_stats[0])
@@ -147,6 +195,11 @@ class SHDPWrapper(BaseModel):
         self.__words = [] # Keep the count for the upcoming words.
 
         for i, (doc_bow, N) in enumerate(bow):
+            if self.verbose and i % 10 == 0:
+                print(f'Document {i+1}/{N}')
+            if len(doc_bow) == 0 or len(doc_bow[0]) == 0:
+                logging.warn(f'Received empty bow - skipping.')
+                continue
             bow_vectors = []
             words = []
             for word, count in doc_bow:
