@@ -9,7 +9,7 @@ from gensim.models.ldamulticore import LdaModel
 
 from base import BaseModel
 from mocks.shdp_mocks import vmf_init
-#from utils.namings import topic_columns
+from utils.namings import topic_columns
 
 try:
     from HDP.models import HDP
@@ -89,15 +89,14 @@ class SHDPWrapper(BaseModel):
 
     """
 
-    def __init__(self, n_topics : int=100, dim : int=100, alpha : int=1, 
+    def __init__(self, n_topics : int=100, dim : int=None, alpha : int=1, 
                  gamma : int=2, sigma_0 : float=0.25, tau : float=0.8,
                  C_0 : int=1, m_0 : int=2, kappa_sgd : float=0.6, 
-                 batch_size : int=10, n_passes : int=1, num_docs : int=None, 
+                 batch_size : int=10, passes : int=1, num_docs : int=None, 
                  seed : int=42, vector_map=None, verbose : bool=False,
                  batch_shuffle : bool = True, **kwargs):
         self.obj = HDP
         self.__n_topics = n_topics
-        self.__dim = dim
         self.__alpha = alpha
         self.__gamma = gamma
         self.__sigma_0 = sigma_0
@@ -109,9 +108,18 @@ class SHDPWrapper(BaseModel):
         self.__seed = seed
 
         self.vector_map = vector_map
+
+        if not self.vector_map:
+            raise AssertionError('Expecteed vector map to be provided.')
+        if not dim:
+            self.__dim = self.vector_map.shape[0]
+        else:
+            self.__dim = dim
+
+
         self.verbose = verbose
         self.batch_size = batch_size
-        self.n_passes = n_passes
+        self.passes = passes
         self.batch_shuffle = batch_shuffle
 
         self._initialize_components()
@@ -143,7 +151,7 @@ class SHDPWrapper(BaseModel):
 
         """
         for (doc, N), rho_t in zip(self.glovize(X), self._sgd_steps()):
-            for _ in range(self.n_passes):
+            for _ in range(self.passes):
                 self.obj.meanfield_sgdstep(
                     doc,
                     np.array(doc).shape[0] / np.float(N),
