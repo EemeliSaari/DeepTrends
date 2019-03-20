@@ -10,6 +10,7 @@ import pandas as pd
 from filelock import FileLock
 from gensim.corpora.dictionary import Dictionary
 from gensim.parsing import preprocess_string
+from nltk import tokenize
 
 from pipeline.preprocess import custom_preprocess
 
@@ -120,18 +121,33 @@ class Corpora:
         """
 
         """
-        if self.shuffle:
-            np.random.shuffle(self.corpus) #TODO: Handle with np.random.permutations
-
         N = len(self)
 
-        for c in self._iterator(index):
-            for i, doc_tokens in enumerate(c.tokens):
+        iterable = self._iterator(index)
+
+        for idx in self._indices(iterable):
+            corpus = iterable[idx]
+            tokens = corpus.tokens
+            for ind in self._indices(tokens):
+                doc_tokens = tokens[ind]
                 if len(doc_tokens) > self.document_minimum_length:
                     yield doc_tokens, N
                 else:
-                    logging.warn(f'Received empty file at {c.documents[i]}, skipping.')
-            c.clear()
+                    logging.warn(f'Received empty file at {corpus.documents[ind]}, skipping.')
+            corpus.clear()
+
+    def sentences(self, index=None):
+        """
+
+        """
+        iterable = self._iterator(index=index)
+        for ind in self._indices(iterable=iterable):
+            corpus = iterable[ind]
+            for sentence in corpus.sentences:
+                if len(sentence) > self.document_minimum_length:
+                    yield sentence
+                else:
+                    logging.warn(f'Received empty file at {corpus.documents[ind]}, skipping.')
 
     def documents(self, index=None):
         """
@@ -159,6 +175,16 @@ class Corpora:
             elif isinstance(index, str):
                 iterator = [self.__paths[index]]
         return iterator
+
+    def _indices(self, iterable):
+        """
+
+        """
+        if self.shuffle:
+            indices = np.random.permutation(len(iterable))
+        else:
+            indices = range(len(iterable))
+        return indices
 
 
 class Corpus:
@@ -223,6 +249,15 @@ class Corpus:
 
         """
         return self.__docs
+
+    @property
+    def sentences(self):
+        """
+
+        """
+        too_short = lambda s: len(s.split(' ')) > 3
+        texts = [' '.join(filter(too_short, l.split('\n'))) for l in self.raw]
+        return list(map(tokenize.sent_tokenize, texts))
 
     @property
     def documents(self):
