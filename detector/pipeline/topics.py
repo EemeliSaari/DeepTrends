@@ -9,7 +9,7 @@ from gensim.models.ldamulticore import LdaModel
 
 from base import BaseModel
 from mocks.shdp_mocks import vmf_init
-from utils.namings import topic_columns
+#from utils.namings import topic_columns
 
 try:
     from HDP.models import HDP
@@ -94,7 +94,7 @@ class SHDPWrapper(BaseModel):
                  C_0 : int=1, m_0 : int=2, kappa_sgd : float=0.6, 
                  batch_size : int=10, n_passes : int=1, num_docs : int=None, 
                  seed : int=42, vector_map=None, verbose : bool=False,
-                 **kwargs):
+                 batch_shuffle : bool = True, **kwargs):
         self.obj = HDP
         self.__n_topics = n_topics
         self.__dim = dim
@@ -105,13 +105,14 @@ class SHDPWrapper(BaseModel):
         self.__C_0 = C_0
         self.__m_0 = m_0
         self.__kappa_sgd = kappa_sgd
-        self.__n_passes = n_passes
         self.__num_docs = num_docs
         self.__seed = seed
 
         self.vector_map = vector_map
         self.verbose = verbose
         self.batch_size = batch_size
+        self.n_passes = n_passes
+        self.batch_shuffle = batch_shuffle
 
         self._initialize_components()
 
@@ -125,36 +126,42 @@ class SHDPWrapper(BaseModel):
             **kwargs)
 
     def validate_parameters(self):
+        """
+
+        """
         if not 0.5 < self.__kappa_sgd <= 1:
             raise ValueError(f'Parameter kappa_sgd {self.__kappa_sgd} is invalid')
     
         if not self.__tau >= 0:
             raise ValueError(f'Parameter tau {self.__tau} is invalid.')
 
+        if not self.batch_size >= 1:
+            raise ValueError(f'Batch size expected to be larger than 1, received {self.batch_size}')
+
     def fit(self, X, y=None):
         """
 
         """
         for (doc, N), rho_t in zip(self.glovize(X), self._sgd_steps()):
-            self.obj.meanfield_sgdstep(
-                doc,
-                np.array(doc).shape[0] / np.float(N),
-                rho_t
-            )
+            for _ in range(self.n_passes):
+                self.obj.meanfield_sgdstep(
+                    doc,
+                    np.array(doc).shape[0] / np.float(N),
+                    rho_t
+                )
 
         self.fitted_ = True
 
         return self
 
     def transform(self, X):
+        """
 
+        """
         self.__doc_states = []
 
-        for i, (doc, N) in enumerate(self.glovize(X)):
- 
-            self.obj.add_data(np.atleast_2d(doc[0].squeeze()), i)
-            self.obj.states_list[-1].meanfieldupdate()
-            self.__doc_states.append(self.obj.states_list[-1].all_expected_stats[0])
+        for i, (doc, N) in enumerate(self.glovize(X, skip_batch=True)):
+            self.__doc_states.append(self._get_state(doc, i))
 
         return self.topics()
 
@@ -188,12 +195,16 @@ class SHDPWrapper(BaseModel):
 
         return sorted_topic_words
 
-    def glovize(self, bow):
+    def glovize(self, bow, skip_batch=False):
+        """
+
+        """
         if not hasattr(self, 'vector_map'):
             raise AssertionError('Cant glovize without vector map.')
 
         self.__words = [] # Keep the count for the upcoming words.
 
+        batch = []
         for i, (doc_bow, N) in enumerate(bow):
             if self.verbose and i % 10 == 0:
                 print(f'Document {i+1}/{N}')
@@ -206,7 +217,31 @@ class SHDPWrapper(BaseModel):
                 bow_vectors.append((self.vector_map[word].values, count))
                 words.append(word)
             self.__words.append(np.array(words))
-            yield (np.array(bow_vectors), i), N
+
+            output = (np.array(bow_vectors), i)
+            if self.batch_size == 1 or skip_batch:
+                yield output, N
+                continue
+
+            batch.append(output)
+            if i == N - 1:
+                pass
+            elif len(batch) < self.batch_size:
+                continue
+
+            if self.batch_shuffle:
+                np.random.shuffle(batch)
+
+            yield batch, N
+            batch = []
+
+    def _get_state(self, doc, index):
+        """
+
+        """
+        self.obj.add_data(np.atleast_2d(doc[0].squeeze()), index)
+        self.obj.states_list[-1].meanfieldupdate()
+        return self.obj.states_list[-1].all_expected_stats[0]
 
     def _initialize_components(self):
         """
