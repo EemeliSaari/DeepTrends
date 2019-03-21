@@ -24,7 +24,7 @@ class LDAWrapper(BaseModel):
     """
     obj = LdaModel
 
-    def __init__(self, num_topics : int=100, alpha='auto', iterations : int=500, 
+    def __init__(self, n_topics : int=100, alpha='auto', iterations : int=500, 
                  update_every : int=0, passes : int=100, eval_every=None, 
                  chunksize : int=2000, batch_size : int=10, verbose : bool=False,
                  **kwargs):
@@ -33,15 +33,19 @@ class LDAWrapper(BaseModel):
         self.__iterations = iterations
         self.__eval_every = eval_every
         self.__update_every = update_every
+        self.__alpha = alpha
         self.batch_size = batch_size
         self.verbose = verbose
 
         super(LDAWrapper, self).__init__(
             alpha=alpha,
             eval_every=eval_every,
-            num_topics=num_topics,
+            num_topics=n_topics,
             update_every=self.__update_every,
             **kwargs)
+
+    def __str__(self):
+        return f'lda_{self.obj.num_topics}K_{self.__alpha}alpha_{self.__iterations}iters_{self.__passes}passes'
 
     def fit(self, X, y=None):
         batch = []
@@ -65,11 +69,13 @@ class LDAWrapper(BaseModel):
 
         return self
 
-    def corpus_to_topics(self, corpus):
+    def transform(self, X):
         """
 
         """
-        return np.array(self.obj.get_document_topics(corpus, minimum_probability=0))[:, :, 1]
+        docs = [d for d, N in X]
+        topics = self.obj.get_document_topics(docs, minimum_probability=0)
+        return np.array(topics)[:, :, 1]
 
     def topic_words(self, n_words=10):
         """
@@ -109,18 +115,20 @@ class SHDPWrapper(BaseModel):
 
         self.vector_map = vector_map
 
-        if not self.vector_map:
+        if self.vector_map is None:
             raise AssertionError('Expecteed vector map to be provided.')
         if not dim:
             self.__dim = self.vector_map.shape[0]
         else:
             self.__dim = dim
 
-
         self.verbose = verbose
         self.batch_size = batch_size
         self.passes = passes
         self.batch_shuffle = batch_shuffle
+
+        self.__words = []
+        self.__doc_states = []
 
         self._initialize_components()
 
@@ -132,6 +140,9 @@ class SHDPWrapper(BaseModel):
             obs_distns=self.__components_0,
             num_docs=num_docs,
             **kwargs)
+
+    def __str__(self):
+        return f'shdp_{self.__n_topics}K_{self.__alpha}alpha_{self.__gamma}gamma'
 
     def validate_parameters(self):
         """
@@ -166,9 +177,7 @@ class SHDPWrapper(BaseModel):
         """
 
         """
-        self.__doc_states = []
-
-        for i, (doc, N) in enumerate(self.glovize(X, skip_batch=True)):
+        for i, (doc, _) in enumerate(self.glovize(X, skip_batch=True, update_words=True)):
             self.__doc_states.append(self._get_state(doc, i))
 
         return self.topics()
@@ -203,7 +212,7 @@ class SHDPWrapper(BaseModel):
 
         return sorted_topic_words
 
-    def glovize(self, bow, skip_batch=False):
+    def glovize(self, bow, skip_batch=False, update_words=False):
         """
 
         """
@@ -219,12 +228,15 @@ class SHDPWrapper(BaseModel):
             if len(doc_bow) == 0 or len(doc_bow[0]) == 0:
                 logging.warn(f'Received empty bow - skipping.')
                 continue
+
             bow_vectors = []
             words = []
             for word, count in doc_bow:
                 bow_vectors.append((self.vector_map[word].values, count))
                 words.append(word)
-            self.__words.append(np.array(words))
+
+            if update_words:
+                self.__words.append(np.array(words))
 
             output = (np.array(bow_vectors), i)
             if self.batch_size == 1 or skip_batch:
@@ -276,7 +288,7 @@ class SHDPWrapper(BaseModel):
             yield (c + self.__tau)**(-self.__kappa_sgd)
 
 
-def corpus_topics(topics, corpus):
+def topics_df(topics, corpus):
     """
 
     """
@@ -288,12 +300,24 @@ def corpus_topics(topics, corpus):
     return topic_df.merge(meta_df, how='outer', right_index=True, left_index=True)
 
 
-def get_model_words(topic_model, n=10):
+def document_topics(model, corpora):
+    """
+
+    """
+    dfs = []
+    for c in corpora.corpus:
+        topics = model.transform(corpora[c.path])
+        dfs.append(topics_df(topics, c))
+    return pd.concat(dfs, axis=0)
+
+
+def model_words(topic_model, n=10):
     """
 
     """
     words = np.array(topic_model.topic_words(n_words=n))
+    n_topics = words.shape[0]
 
-    df = pd.DataFrame(words.T, columns=topic_columns(n=topic_model.num_topics))
+    df = pd.DataFrame(words.T, columns=topic_columns(n=n_topics))
 
     return df
