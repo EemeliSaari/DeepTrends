@@ -1,4 +1,7 @@
+import os
+
 import numpy as np
+import pandas as pd
 from gensim.models.word2vec import Word2Vec
 from sklearn.preprocessing import normalize
 
@@ -61,3 +64,14 @@ class Word2VecWrapper(BaseModel):
         if self.normalize:
             return normalize(res, norm=self.normalize, axis=1)
         return res
+
+
+def load_vectors(path, int_columns=True):
+    if not path:
+        return
+    if not os.path.exists(path):
+        raise OSError()
+    df = pd.read_csv(path)
+    if int_columns:
+        df.columns = [int(c) for c in df.columns]
+    return df
