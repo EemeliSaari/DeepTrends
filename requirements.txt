@@ -6,3 +6,7 @@ beautifulsoup4
 requests
 lxml
 pdfminer.six
+filelock
+nltk
+scikit-learn
+mock
