@@ -134,6 +134,7 @@ class Corpora:
                     yield doc_tokens, N
                 else:
                     logging.warn(f'Received empty file at {corpus.documents[ind]}, skipping.')
+                    corpus.mark_empty(ind)
             corpus.clear()
 
     def sentences(self, index=None):
@@ -206,6 +207,8 @@ class Corpus:
         self.__parsing_method = parsing
         self.__tokens = []
         self.__docs = []
+        self.__documents = []
+        self.__mask = []
 
     def __enter__(self):
         return self.load()
@@ -229,6 +232,7 @@ class Corpus:
                 self.__docs = [self._read_file(self.path)]
         self.n_docs = len(self.__docs)
         self.is_loaded = True
+        self.__mask = [True for _ in range(self.n_docs)]
 
         return self
 
@@ -239,9 +243,16 @@ class Corpus:
         if not self.keep_documents:
             self.n_docs = 0
             self.__docs = []
+            self.__mask = []
 
         if not self.keep_tokens:
             self.__tokens = []
+
+    def mark_empty(self, index):
+        """
+
+        """
+        self.__mask[index] = True
 
     @property
     def raw(self):
@@ -265,6 +276,9 @@ class Corpus:
 
         """
         return self.__documents
+        #docs = np.array(self.__documents)
+
+        #return docs[self.__mask].tolist()
 
     @property
     def tokens(self):
