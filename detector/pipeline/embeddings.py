@@ -6,6 +6,7 @@ from gensim.models.word2vec import Word2Vec
 from sklearn.preprocessing import normalize
 
 from base import BaseModel
+from corpora import Corpora
 
 
 class Word2VecWrapper(BaseModel):
@@ -26,11 +27,19 @@ class Word2VecWrapper(BaseModel):
                 min_count=1,
                 **kwargs)
 
+        self.__ws = window
+
         if dictionary:
             self.obj.build_vocab([[v for v in dictionary.values()]])
 
         self.normalize = normalize
         self.batch_size = batch_size
+
+    def __str__(self):
+        name = f'word2vec_{self.obj.vector_size}size_{self.__ws}win_{len(self.obj.wv.vocab)}N'
+        if self.normalize:
+            name += '_normalized'
+        return name
 
     def fit(self, X, y=None, epochs=50):
         """
@@ -58,20 +67,49 @@ class Word2VecWrapper(BaseModel):
         """
 
         """
-        res = np.empty((len(X), self.obj.vector_size))
-        for i, word in enumerate(X):
-            res[i, :] = self.obj.wv[word]
+        if isinstance(X, Corpora):
+            words = X.dictionary.values()
+        elif isinstance(X, (tuple, list)):
+            words = X
+
+        vectors = np.empty((len(words), self.obj.vector_size))
+        for i, word in enumerate(words):
+            vectors[i, :] = self.obj.wv[word]
         if self.normalize:
-            return normalize(res, norm=self.normalize, axis=1)
+            vectors = normalize(vectors, norm=self.normalize, axis=1)
+
+        res = {w:vectors[i, :] for i, w in enumerate(words)}
+
         return res
 
+    @property
+    def vectors(self):
+        """
 
-def load_vectors(path, int_columns=True):
+        """
+        if self.normalize:
+            vectors = np.empty((len(self.obj.wv), self.obj.vector_size))
+            for i, word in enumerate(self.obj.wv):
+                vectors[i, :] = self.obj.wv[word]
+            vectors = normalize(vectors, norm=self.normalize, axis=1)
+            return {w:vectors[i, :] for i, w in enumerate(self.obj.wv)}
+        return self.obj.wv
+
+
+def load_vectors(path, int_columns=True, dictionary=None):
+    """
+
+    """
     if not path:
         return
     if not os.path.exists(path):
         raise OSError()
     df = pd.read_csv(path)
-    if int_columns:
+    if dictionary:
+        missing = list(filter(lambda w: w not in dictionary.values(), df.columns))
+        df = df.drop(missing, axis=1)
+        df.columns = [dictionary.token2id[word] for word in df.columns]
+
+    if int_columns and not dictionary:
         df.columns = [int(c) for c in df.columns]
     return df
