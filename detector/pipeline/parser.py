@@ -129,7 +129,7 @@ def parse_all_pdf(path : str, outpath : str, engine : str):
     if not pdfs:
         return
 
-    inputs = map(lambda f: os.path.join(path, f), pdfs)
+    inputs = map(lambda f: os.path.abspath(os.path.join(path, f)), pdfs)
     outputs = map(lambda f: os.path.join(outpath, f.replace('.pdf', '.txt')), pdfs)
     coroutines = [routine(*params) for params in zip(inputs, outputs)]
 
