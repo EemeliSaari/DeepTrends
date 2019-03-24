@@ -1,6 +1,13 @@
+import sys
+
+sys.path.append('..')
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+from pandas.plotting import register_matplotlib_converters
+register_matplotlib_converters()
 
 from utils.topic_dists import dists_over_years
 
@@ -34,10 +41,13 @@ def distribution_per_topic(df):
     """
     years, dists = dists_over_years(df)
 
+    print(dists.shape)
+    print(dists[0, :]-dists[1,:])
+
     plt.figure(figsize=(8,12))
 
     previous = np.zeros((dists.shape[0], ))
-    axis = pd.to_datetime(years)
+    axis = pd.to_datetime(years, format='%Y')
 
     for i in range(0, dists.shape[1]):
         current = dists[:, i] + previous
@@ -51,5 +61,5 @@ def distribution_per_topic(df):
         previous = current
 
     plt.ylim(bottom=0, top=1)
-    plt.xlim(left=pd.to_datetime(years[0]),right=pd.to_datetime(years[-1]))
+    plt.xlim(left=axis[0], right=axis[-1])
     plt.show()
