@@ -14,8 +14,8 @@ from utils.namings import topic_columns
 try:
     from HDP.models import HDP
     from core.core_distributions import vonMisesFisherLogNormal as vMF
-except ImportError:
-    logging.warn('Could not import modules for sHDP')
+except ImportError as e:
+    logging.warn(f'Could not import modules for sHDP: {str(e)}')
 
 
 class LDAWrapper(BaseModel):
@@ -86,7 +86,7 @@ class LDAWrapper(BaseModel):
         for topic_id, text in self.obj.show_topics(num_topics=self.obj.num_topics, num_words=n_words):
             topic_words = [parse_word(x) for x in text.split('+')]
             words[int(topic_id)] = topic_words
-        return np.array(words)
+        return words
 
 
 @mock.patch('sHDP.core.core_distributions.vonMisesFisherLogNormal.__init__', vmf_init)
@@ -129,6 +129,7 @@ class SHDPWrapper(BaseModel):
 
         self.__words = []
         self.__doc_states = []
+        #self.__words = [] # Keep the count for the upcoming words.
 
         self._initialize_components()
 
@@ -177,18 +178,19 @@ class SHDPWrapper(BaseModel):
         """
 
         """
+        self.__index = len(self.__doc_states)
         for i, (doc, _) in enumerate(self.glovize(X, skip_batch=True, update_words=True)):
             self.__doc_states.append(self._get_state(doc, i))
-
+        self.obj._clear_caches()
         return self.topics()
 
     def topics(self):
         """
 
         """
-        topic_dist = np.empty((len(self.__doc_states), self.obj.num_states))
-        for i in range(topic_dist.shape[0]):
-            topic_dist[i, :] = np.average(self.__doc_states[i], 0)
+        topic_dist = np.empty((len(self.__doc_states)-self.__index, self.obj.num_states))
+        for i, idx in enumerate(range(self.__index, len(self.__doc_states))):
+            topic_dist[i, :] = np.average(self.__doc_states[idx], 0)
         return topic_dist
 
     def topic_words(self, n_words=15):
@@ -219,8 +221,6 @@ class SHDPWrapper(BaseModel):
         if not hasattr(self, 'vector_map'):
             raise AssertionError('Cant glovize without vector map.')
 
-        self.__words = [] # Keep the count for the upcoming words.
-
         batch = []
         for i, (doc_bow, N) in enumerate(bow):
             if self.verbose and i % 10 == 0:
@@ -231,9 +231,16 @@ class SHDPWrapper(BaseModel):
 
             bow_vectors = []
             words = []
+            missing = []
             for word, count in doc_bow:
+                if word not in self.vector_map.columns:
+                    missing.append(word)
+                    continue
                 bow_vectors.append((self.vector_map[word].values, count))
                 words.append(word)
+
+            if missing:
+                logging.warn(f'Did not find vectors for: {", ".join(missing)}')
 
             if update_words:
                 self.__words.append(np.array(words))
@@ -293,7 +300,6 @@ def topics_df(topics, corpus):
 
     """
     topic_df = pd.DataFrame(topics, columns=topic_columns(n=topics.shape[1]))
-
     meta = [(corpus.year, corpus.id2doc[i]) for i in range(topics.shape[0])]
     meta_df = pd.DataFrame(meta, columns=['year', 'doc'])
 
@@ -306,16 +312,25 @@ def document_topics(model, corpora):
     """
     dfs = []
     for c in corpora.corpus:
-        topics = model.transform(corpora[c.path])
+        try:
+            topics = model.transform(corpora[c.path])
+        except MemoryError as e:
+            print(c.path)
+            raise e
         dfs.append(topics_df(topics, c))
     return pd.concat(dfs, axis=0)
 
 
-def model_words(topic_model, n=10):
+def model_words(topic_model, n=10, dictionary=None):
     """
 
     """
-    words = np.array(topic_model.topic_words(n_words=n))
+    words = topic_model.topic_words(n_words=n)
+    if dictionary:
+        words = [[dictionary[w] for w in seq] for seq in words]
+
+    words = np.array(words)
+
     n_topics = words.shape[0]
 
     df = pd.DataFrame(words.T, columns=topic_columns(n=n_topics))
