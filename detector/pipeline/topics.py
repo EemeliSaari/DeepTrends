@@ -1,4 +1,5 @@
 import collections
+import gc
 import itertools
 import logging
 
@@ -127,9 +128,8 @@ class SHDPWrapper(BaseModel):
         self.passes = passes
         self.batch_shuffle = batch_shuffle
 
-        self.__words = []
+        self.__words = [] # Keep the count for the upcoming words.
         self.__doc_states = []
-        #self.__words = [] # Keep the count for the upcoming words.
 
         self._initialize_components()
 
@@ -218,6 +218,8 @@ class SHDPWrapper(BaseModel):
         """
 
         """
+        gc.collect()
+
         if not hasattr(self, 'vector_map'):
             raise AssertionError('Cant glovize without vector map.')
 
