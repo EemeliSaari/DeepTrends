@@ -39,9 +39,7 @@ def main(model, alpha, n_topics, data_path, data_prefix, result_path, dictionary
     corpora_params = dict(
         data_path=data_path,
         prefix=data_prefix,
-        iterator='bow',
-        word_up_limit=0.75, 
-        word_low_limit=20
+        iterator='bow'
     )
 
     if os.path.exists(dictionary_path):
