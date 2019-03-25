@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 import pandas as pd
-from gensim.models.word2vec import Word2Vec
+from gensim.models.word2vec import Word2Vec, Word2VecKeyedVectors
 from sklearn.preprocessing import normalize
 
 from base import BaseModel
@@ -18,25 +18,30 @@ class Word2VecWrapper(BaseModel):
     def __init__(self, weights : str = None, size : int=100, window : int=5,
                  min_count : int=1, normalize : str=None, dictionary=None,
                  batch_size : int=10, **kwargs):
+
         if weights:
-            self.obj = Word2Vec.load_word2vec_format(weights, binary=True)
+            self.__window = None
+            self.obj = Word2VecKeyedVectors.load_word2vec_format(weights, binary=True)
         else:
+            self.__ws = window
+
             super(Word2VecWrapper, self).__init__(
                 size=size,
                 window=5,
                 min_count=1,
                 **kwargs)
 
-        self.__ws = window
-
-        if dictionary:
-            self.obj.build_vocab([[v for v in dictionary.values()]])
+            if dictionary:
+                self.obj.build_vocab([[v for v in dictionary.values()]])
 
         self.normalize = normalize
         self.batch_size = batch_size
 
     def __str__(self):
-        name = f'word2vec_{self.obj.vector_size}size_{self.__ws}win_{len(self.obj.wv.vocab)}N'
+        name = f'word2vec_{self.obj.vector_size}size_'
+        if self.__win:
+            name += f'{self.__ws}win'
+        name += f'_{len(self.obj.wv.vocab)}N'
         if self.normalize:
             name += '_normalized'
         return name
