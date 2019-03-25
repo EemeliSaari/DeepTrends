@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import time
+import threading
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,49 @@ from nltk import tokenize
 from pipeline.preprocess import custom_preprocess
 
 
-class Corpora:
+class Loader:
+
+    loaded = False
+    processing = False
+    current_index = 0
+
+    def __init__(self, corpus, batch_size=1):
+        self.corpus = corpus
+
+    def __enter__(self):
+        self.__thread = threading.Thread(target=self._load_loop)
+        self.processing = True
+        self.__thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.processing = False
+        self.__thread.join()
+
+    def __len__(self):
+        return sum([c.n_docs for c in self.corpus])
+
+    def _load_loop(self):
+        while self.processing:
+            if not self.loaded:
+                print('Loading', self.current_index)
+                self.loading = True
+                self.corpus[self.current_index].build()
+                self.loaded = True
+                self.loading = False
+
+    def _move(self):
+        """
+
+        """
+        if self.processing:
+            while self.loading:
+                pass
+            self.current_index = (self.current_index + 1) % len(self)
+            self.loaded = False
+
+
+class Corpora(Loader):
     """
 
     """
@@ -23,16 +66,16 @@ class Corpora:
 
     def __init__(self, data_path : str, prefix : str=None, 
                  iterator : str='token', parsing : str='simple',
-                 word_up_limit : float=0.5, word_low_limit : int=5,
+                 word_up_limit : float=0.75, word_low_limit : int=20,
                  dictionary : str=None, shuffle : bool=False, seed : int=42,
                  document_minimum_length : int=5):
 
         iter_map = dict(
             token=self.tokenize,
-            bow=self.bowize
+            bow=self.bowize,
+            sentences=self.sentences
         )
         self.iterator = iter_map[iterator]
-        self.corpus = self.init_corpus(data_path, prefix, parsing)
 
         self.word_low_limit = word_low_limit
         self.word_up_limit = word_up_limit
@@ -48,19 +91,23 @@ class Corpora:
 
         self.document_minimum_length = document_minimum_length
 
-    def __enter__(self):
-        self.build()
-        return self
+        corpus = self.init_corpus(data_path, prefix, parsing)
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+        super(Corpora, self).__init__(corpus=corpus)
+
+    def __enter__(self):
+        if not self.is_built:
+            self.build()
+
+        return super(Corpora, self).__enter__()
+
+    def __exit__(self, *args):
         self.clear()
+        return super(Corpora, self).__exit__(*args)
 
     def __iter__(self):
         for v in self.iterator():
             yield v
-
-    def __len__(self):
-        return sum([c.n_docs for c in self.corpus])
 
     def __getitem__(self, key):
         return self.iterator(index=key)
@@ -128,6 +175,7 @@ class Corpora:
         for idx in self._indices(iterable):
             corpus = iterable[idx]
             tokens = corpus.tokens
+            self._move()
             for ind in self._indices(tokens):
                 doc_tokens = tokens[ind]
                 if len(doc_tokens) > self.document_minimum_length:
@@ -187,12 +235,12 @@ class Corpora:
             indices = range(len(iterable))
         return indices
 
-
 class Corpus:
     """
 
     """
-    PARSERS = dict(gensim=preprocess_string, simple=custom_preprocess)
+    PARSERS = dict(gensim=preprocess_string, 
+                   simple=custom_preprocess)
     n_docs = 0
     is_loaded = False
 
@@ -209,6 +257,7 @@ class Corpus:
         self.__docs = []
         self.__documents = []
         self.__mask = []
+        self.__sentences = []
 
     def __enter__(self):
         return self.load()
@@ -236,6 +285,13 @@ class Corpus:
 
         return self
 
+    def build(self):
+        """
+
+        """
+        for attr in ['sentences', 'tokens']:
+            getattr(self, attr)
+
     def clear(self):
         """
 
@@ -247,6 +303,8 @@ class Corpus:
 
         if not self.keep_tokens:
             self.__tokens = []
+
+        self.__sentences = []
 
     def mark_empty(self, index):
         """
@@ -266,36 +324,36 @@ class Corpus:
         """
 
         """
-        too_short = lambda s: len(s.split(' ')) > 3
-        texts = [' '.join(filter(too_short, l.split('\n'))) for l in self.raw]
-        return list(map(tokenize.sent_tokenize, texts))
+        if len(self.__sentences) == 0:
+            too_short = lambda s: len(s.split(' ')) > 3
+            sentences = [' '.join(filter(too_short, l.split('\n'))) for l in self.raw]
+            self.__sentences = list(map(tokenize.sent_tokenize, sentences))
+        return self._mask(self.__sentences)
 
     @property
     def documents(self):
         """
 
         """
-        return self.__documents
-        #docs = np.array(self.__documents)
-
-        #return docs[self.__mask].tolist()
+        return self._mask(self.__documents)
 
     @property
     def tokens(self):
         """
 
         """
-        start = time.time()
-        self.__tokens = list(map(self.PARSERS[self.__parsing_method], self.raw))
-        logging.info('Corpora tokens took: {:.5f}s'.format(time.time()-start))
-        return self.__tokens
+        if len(self.__tokens) == 0:
+            start = time.time()
+            self.__tokens = list(map(self.PARSERS[self.__parsing_method], self.raw))
+            logging.info('Corpora tokens took: {:.5f}s'.format(time.time()-start))
+        return self._mask(self.__tokens)
 
     @property
     def id2doc(self):
         """
 
         """
-        return self.__documents
+        return self._mask(self.__documents)
 
     @property
     def year(self):
@@ -303,6 +361,15 @@ class Corpus:
 
         """
         return re.findall('\d+', self.path)[-1]
+
+    def _mask(self, iterable):
+        """
+
+        """
+        #print(len(iterable), len(self.__mask))
+        if not len(iterable) == len(self.__mask):
+            raise AssertionError('Asserted the mask to correspond to iterable.')
+        return [x for x, m in zip(iterable, self.__mask) if m]
 
     def _read_folder(self):
         """
