@@ -1,3 +1,3 @@
-## Word2Vector pipeline
+## Pipeline
 
-Main routine of the process.
+Main routines to detect the trends.
