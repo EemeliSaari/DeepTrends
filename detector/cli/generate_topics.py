@@ -18,7 +18,7 @@ from pipeline.topics import (LDAWrapper, SHDPWrapper, document_topics,
 
 @click.command()
 @click.option('--model', type=str)
-@click.option('--alpha', type=int, default=1)
+@click.option('--alpha', type=float, default=1)
 @click.option('--n_topics', type=int, default=50)
 @click.option('--data_path', type=str)
 @click.option('--data_prefix', type=str)
@@ -51,7 +51,6 @@ def main(model, alpha, n_topics, data_path, data_prefix, result_path, dictionary
     if len(corpora) == 0:
         raise ValueError(f'Did not find any documents from path: {data_path} for given prefix {data_prefix}')
 
-
     MAP = dict(
         lda=(LDAWrapper,
             dict(
@@ -77,7 +76,9 @@ def main(model, alpha, n_topics, data_path, data_prefix, result_path, dictionary
 
     model_class, params = MAP[model]
     topic_model = model_class(**params)
-    topic_model.fit(corpora)
+
+    data = [doc for doc, _ in corpora] # Gather the data since BOW reprecentation is lightweight.
+    topic_model.fit(data)
 
     model_name = str(topic_model) + f'_{data_prefix}'
     years = corpora.years
@@ -91,18 +92,18 @@ def main(model, alpha, n_topics, data_path, data_prefix, result_path, dictionary
         os.mkdir(path_dir)
 
     if hasattr(topic_model, 'save'):
-        topic_model.save(model_name)
+        topic_model.save(os.path.join(result_path, model_name))
 
     topic_df = document_topics(topic_model, corpora)
-    
+
     dictionary = None
     if model == 'shdp':
         dictionary = corpora.dictionary
 
     words_df = model_words(topic_model, n=n_words, dictionary=dictionary)
 
-    topics_path = os.path.join(path_dir, 'topics_' + model_name + '.csv')
-    words_path = os.path.join(path_dir, 'words_' + model_name + '.csv')
+    topics_path = os.path.join(path_dir, 'topics.csv')
+    words_path = os.path.join(path_dir, 'words.csv')
 
     print(topic_df.head())
     print(topic_df.tail())
