@@ -19,28 +19,28 @@ class Word2VecWrapper(BaseModel):
                  min_count : int=1, normalize : str=None, dictionary=None,
                  batch_size : int=10, **kwargs):
 
+        self.dictionary = dictionary
+        self.window = window
+
         if weights:
-            self.__window = None
             self.obj = Word2VecKeyedVectors.load_word2vec_format(weights, binary=True)
         else:
-            self.__ws = window
-
             super(Word2VecWrapper, self).__init__(
                 size=size,
-                window=5,
-                min_count=1,
+                window=self.window,
+                min_count=min_count,
                 **kwargs)
 
-            if dictionary:
-                self.obj.build_vocab([[v for v in dictionary.values()]])
+            if self.dictionary:
+                self.obj.build_vocab([[v for v in self.dictionary.values()]])
 
         self.normalize = normalize
         self.batch_size = batch_size
 
     def __str__(self):
         name = f'word2vec_{self.obj.vector_size}size_'
-        if self.__win:
-            name += f'{self.__ws}win'
+        if self.window:
+            name += f'{self.window}win'
         name += f'_{len(self.obj.wv.vocab)}N'
         if self.normalize:
             name += '_normalized'
@@ -93,11 +93,19 @@ class Word2VecWrapper(BaseModel):
 
         """
         if self.normalize:
-            vectors = np.empty((len(self.obj.wv), self.obj.vector_size))
-            for i, word in enumerate(self.obj.wv):
-                vectors[i, :] = self.obj.wv[word]
+            if self.dictionary:
+                vectors = np.empty((len(self.dictionary), self.obj.vector_size))
+                values = [v for v in self.dictionary.values()]
+                iterable = [w for w in self.obj.vocab if w in values]
+            else:
+                vectors = np.empty((len(self.obj.wv), self.obj.vector_size))
+                iterable = self.obj.wv
+
+            print(len(iterable))
+            for i, word in enumerate(iterable):
+                    vectors[i, :] = self.obj.wv[word]
             vectors = normalize(vectors, norm=self.normalize, axis=1)
-            return {w:vectors[i, :] for i, w in enumerate(self.obj.wv)}
+            return {w:vectors[i, :] for i, w in enumerate(iterable)}
         return self.obj.wv
 
 

@@ -3,6 +3,7 @@ import sys
 
 import click
 import pandas as pd
+from gensim.corpora.dictionary import Dictionary
 
 sys.path.append('..')
 
@@ -49,6 +50,8 @@ def main(model, weights, data_path, data_prefix, result_path, dictionary_path, s
         corpora = initialize_corpora(data_path, data_prefix, dictionary_path, 
             'token')
         dictionary = corpora.dictionary
+    elif not data_path and dictionary_path:
+        dictionary = Dictionary.load_from_text(dictionary_path)
 
     MAP = dict(
         word2vec=(Word2VecWrapper,
