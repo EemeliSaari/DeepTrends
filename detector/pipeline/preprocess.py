@@ -16,5 +16,5 @@ def custom_preprocess(doc):
     ]
     for f in filters:
         doc = f(doc)
-    doc = parsing.strip_short(doc, minsize=2)
+    doc = parsing.strip_short(doc, minsize=3)
     return doc.split(' ')
