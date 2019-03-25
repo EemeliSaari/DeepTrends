@@ -1,4 +1,5 @@
 import sys
+import os
 
 sys.path.append('..')
 
@@ -12,7 +13,7 @@ register_matplotlib_converters()
 from utils.topic_dists import dists_over_years
 
 
-def distribution_per_year(df):
+def distribution_per_year(df, path : str=None, display : bool=False):
     """
 
     """
@@ -32,17 +33,19 @@ def distribution_per_year(df):
         plt.bar(axis, current, bottom=previous, label=years[i], alpha=alpha)
         previous = current
     plt.legend()
-    plt.show()
+    if path:
+        plt.savefig(os.path.join(path, 'dist_per_year.png'))
+    if display:
+        plt.show()
+    plt.clf()
+    plt.close()
 
 
-def distribution_per_topic(df):
+def distribution_per_topic(df, path : str=None, display : bool=False):
     """
 
     """
     years, dists = dists_over_years(df)
-
-    print(dists.shape)
-    print(dists[0, :]-dists[1,:])
 
     plt.figure(figsize=(8,12))
 
@@ -55,11 +58,16 @@ def distribution_per_topic(df):
         plt.fill_between(axis, current, previous, alpha=0.3)
 
         diff = current.max()-previous.max()
-        if diff >= 0.05:
+        if diff >= 0.025:
             plt.annotate(f'Topic {i}', xy=(pd.to_datetime(years[-1]), previous.max()+diff/2))
 
         previous = current
 
     plt.ylim(bottom=0, top=1)
     plt.xlim(left=axis[0], right=axis[-1])
-    plt.show()
+    if path:
+        plt.savefig(os.path.join(path, 'dist_per_topic.png'))
+    if display:
+        plt.show()
+    plt.clf()
+    plt.close()
