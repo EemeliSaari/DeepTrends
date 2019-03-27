@@ -27,15 +27,15 @@ class LDAWrapper(BaseModel):
 
     def __init__(self, n_topics : int=100, alpha='auto', iterations : int=500, 
                  update_every : int=0, passes : int=100, eval_every=None, 
-                 chunksize : int=2000, batch_size : int=10, verbose : bool=False,
+                 batch_size : int=2000, verbose : bool=False,
                  **kwargs):
-        self.__chunksize = chunksize
+        self.__chunksize = batch_size
         self.__passes = passes
         self.__iterations = iterations
         self.__eval_every = eval_every
         self.__update_every = update_every
         self.__alpha = alpha
-        self.batch_size = batch_size
+
         self.verbose = verbose
 
         super(LDAWrapper, self).__init__(
@@ -49,22 +49,13 @@ class LDAWrapper(BaseModel):
         return f'lda_{self.obj.num_topics}K_{self.__alpha}alpha_{self.__iterations}iters_{self.__passes}passes'
 
     def fit(self, X, y=None):
-        batch = []
-        for i, (doc, N) in enumerate(X):
-            batch.append(doc)
-            if i == N - 1:
-                pass
-            elif len(batch) < self.batch_size:
-                continue
-            if self.verbose:
-                print(f'Document {i+1}/{N}')
-            self.obj.update(
-                corpus=batch,
-                passes=self.__passes,
-                chunksize=self.__chunksize,
-                iterations=self.__iterations
-            )
-            batch = []
+
+        self.obj.update(
+            corpus=X,
+            passes=self.__passes,
+            chunksize=self.__chunksize,
+            iterations=self.__iterations
+        )
 
         self.fitted_ = True
 
