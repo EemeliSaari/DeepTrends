@@ -16,7 +16,8 @@ from utils.topic_dists import dists_over_years
 register_matplotlib_converters()
 
 
-def topic_dist_per_year(df, path : str=None, display : bool=False, smooth_method : str='gauss'):
+def topic_dist_per_year(df, path : str=None, display : bool=False, 
+                        smooth_method : str='gauss', **kwargs):
     years, dists = dists_over_years(df)
     axis = pd.to_datetime(years, format='%Y')
 
@@ -45,7 +46,7 @@ def topic_dist_per_year(df, path : str=None, display : bool=False, smooth_method
 
 
 def topic_regression(df, path : str=None, display : bool=False, 
-                     truncate : bool=True, order : int=3):
+                     truncate : bool=True, order : int=3, **kwargs):
     """
 
     """
