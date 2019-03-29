@@ -19,19 +19,17 @@ def distribution_per_year(df, path : str=None, display : bool=False):
     """
     years, dists = dists_over_years(df)
 
-    plt.figure(figsize=(20,12))
-
     previous = dists[0, :]
     axis = range(dists.shape[1])
 
-    plt.bar(axis, previous, alpha=0.8, label=years[0])
+    plt.figure(figsize=(20,12))
+
+    plt.bar(axis, previous, alpha=0.7, label=years[0])
     for i in range(1, dists.shape[0]):
         current = dists[i, :]
-        alpha = 0.3
-        if current.max() > .3:
-            alpha = 1
-        plt.bar(axis, current, bottom=previous, label=years[i], alpha=alpha)
+        plt.bar(axis, current, bottom=previous, label=years[i], alpha=0.7)
         previous = current
+    
     plt.legend()
     if path:
         plt.savefig(os.path.join(path, 'dist_per_year.png'))
