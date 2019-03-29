@@ -18,7 +18,7 @@ from pipeline.topics import (LDAWrapper, SHDPWrapper, document_topics,
 
 @click.command()
 @click.option('--model', type=str)
-@click.option('--alpha', type=float, default=1)
+@click.option('--alpha')
 @click.option('--n_topics', type=int, default=50)
 @click.option('--data_path', type=str)
 @click.option('--data_prefix', type=str)
@@ -92,7 +92,7 @@ def main(model, alpha, n_topics, data_path, data_prefix, result_path, dictionary
         os.mkdir(path_dir)
 
     if hasattr(topic_model, 'save'):
-        topic_model.save(os.path.join(result_path, model_name))
+        topic_model.save(os.path.join(path_dir, model_name))
 
     topic_df = document_topics(topic_model, corpora)
 
