@@ -54,7 +54,7 @@ class Loader:
         if self.processing:
             while self.loading:
                 pass
-            self.current_index = (self.current_index + 1) % len(self)
+            self.current_index = (self.current_index + 1) % len(self.corpus)
             self.loaded = False
 
 
@@ -161,8 +161,23 @@ class Corpora(Loader):
         """
 
         """
-        for doc_tokens, N in self.tokenize(index=index):
-            yield self.dictionary.doc2bow(doc_tokens), N
+        N = len(self)
+
+        iterable = self._iterator(index)
+
+        for idx in self._indices(iterable):
+            corpus = iterable[idx]
+            tokens = corpus.tokens
+
+            for ind in self._indices(tokens):
+                doc_tokens = tokens[ind]
+                bow = self.dictionary.doc2bow(doc_tokens)
+                if len(bow) > self.document_minimum_length:
+                    yield bow, N
+                else:
+                    logging.warn(f'Received empty file at {corpus.documents[ind]}, skipping.')
+                    corpus.mark_empty(ind)
+            corpus.clear()
 
     def tokenize(self, index=None):
         """
@@ -217,6 +232,9 @@ class Corpora(Loader):
         return sorted([int(c.year) for c in self.corpus])
 
     def _iterator(self, index=None):
+        """
+
+        """
         iterator = self.corpus
         if index:
             if isinstance(index, int):
