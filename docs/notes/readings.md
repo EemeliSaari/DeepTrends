@@ -93,3 +93,51 @@ This document contains some of the notes taken from reading topic related articl
 ### Socher et al. Reasoning With Neural Tensor Networks for Knowledge Base Completion
 
 **Main:** 
+
+#### Notes
+
+### Pennington et al. GloVe: Global Vectors for Word Representation, 2014
+
+**Main:** Weighted least squares model that trains on word-word co-occurance counts and makes use of statistics while word2vector isn't making a full use of it. Combines the Skip-gram with LSA (Latent semantic analysis).
+
+#### Notes
+
+- Very widely used model for word embeddings.
+- They argue that when learning distributional word embeddings: Count-based and prediction-based methods don't differe too much.
+- Efficient for unsupervised learning.
+
+### Nguyen et al. Improving Topic Models with Latent Feature Word Representations, 2015
+
+**Main:** Aims to tackle the small distribution problems with topic modelling from short texts. 
+
+#### Notes
+
+- Experimental results have shown to improve topic qualities from external sources
+  - Phan et al. (2011) assumed that the small corpus is a sample of topics from larger corpus like Wikipedia
+- Used DMM (Dirichlet Multinomial Mixture) model for short texts
+  - Each topic is assumed to only have one topic.
+- Propose LF-LDA and LF-DMM that integrate a latent feature model within two topic models.
+
+### Shazeer et al. Swivel: Improving Embeddings by Noticing What's Missing, 2016
+
+**Main:** Making use of the whole information from the point-wise mutual information matrix. Accounting what is missing etc.
+
+#### Notes
+
+- Uses the SGD (Stochastic gradient descent) to perform weighted approximate matrix factorization leading to embeddings.
+- Designed to work in distributed environments and utilize the GPU computation.
+- Similiar optimization problem with GloVe.
+- Reports: Better embeddings for rare features without sacrificing quality for common ones.
+- Can be applied to much large corpora.
+
+### Bojanowski et al. Enriching Word Vectors with Subword Information, 2017
+
+**Main:** Extension to Mikolov et al. 2013 Skip-gram model. Takes into account some of the internal structures of the words - more meaningful in the complex morphologically rich languages, such as Turkish or Finnish. 
+
+#### Notes
+
+- More or less related to machine translation & morphological word representations
+  - Their proposed model takes the morphology into account.
+- Represents the word by a sum of its character *n-grams*.
+- Interesting approach since some of the other methods have tried to abstract from word level to sentence level and other context levels when this method proposed by Bojanowski et al. concrete the abstraction level down to subword level.
+
