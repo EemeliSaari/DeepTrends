@@ -95,7 +95,10 @@ class SHDPWrapper(BaseModel):
                  batch_shuffle : bool = True, **kwargs):
         self.obj = HDP
         self.__n_topics = n_topics
-        self.__alpha = alpha
+        if isinstance(alpha, str):
+            self.__alpha = float(alpha)
+        else:
+            self.__alpha = alpha
         self.__gamma = gamma
         self.__sigma_0 = sigma_0
         self.__tau = tau
@@ -104,6 +107,8 @@ class SHDPWrapper(BaseModel):
         self.__kappa_sgd = kappa_sgd
         self.__num_docs = num_docs
         self.__seed = seed
+
+        print(self.__gamma)
 
         self.vector_map = vector_map
 
@@ -126,15 +131,17 @@ class SHDPWrapper(BaseModel):
 
         self.validate_parameters()
 
+        print(alpha, n_topics)
+
         super(SHDPWrapper, self).__init__(
             alpha=self.__alpha, 
             gamma=self.__gamma,
             obs_distns=self.__components_0,
-            num_docs=num_docs,
+            num_docs=num_docs+1,
             **kwargs)
 
     def __str__(self):
-        return f'shdp_{self.__n_topics}K_{self.__alpha}alpha_{self.__gamma}gamma'
+        return f'shdp_{self.__n_topics}K_{self.__alpha}alpha_{self.__gamma}gamma_{self.__dim}dim_{self.passes}passes_{self.__gamma}gamma'
 
     def validate_parameters(self):
         """
@@ -142,7 +149,7 @@ class SHDPWrapper(BaseModel):
         """
         if not 0.5 < self.__kappa_sgd <= 1:
             raise ValueError(f'Parameter kappa_sgd {self.__kappa_sgd} is invalid')
-    
+
         if not self.__tau >= 0:
             raise ValueError(f'Parameter tau {self.__tau} is invalid.')
 
@@ -153,13 +160,19 @@ class SHDPWrapper(BaseModel):
         """
 
         """
+        i = 0
+        print('Starting the fitting process!')
         for (doc, N), rho_t in zip(self.glovize(X), self._sgd_steps()):
+            print(f'Document {i}/{N}')
             for _ in range(self.passes):
+                if self.batch_shuffle and len(doc) > 1:
+                    np.random.shuffle(doc)
                 self.obj.meanfield_sgdstep(
                     doc,
                     np.array(doc).shape[0] / np.float(N),
                     rho_t
                 )
+            i += len(doc)
 
         self.fitted_ = True
 
@@ -214,8 +227,10 @@ class SHDPWrapper(BaseModel):
         if not hasattr(self, 'vector_map'):
             raise AssertionError('Cant glovize without vector map.')
 
+        N = len(bow)
+
         batch = []
-        for i, (doc_bow, N) in enumerate(bow):
+        for i, doc_bow in enumerate(bow):
             if self.verbose and i % 10 == 0:
                 print(f'Document {i+1}/{N}')
             if len(doc_bow) == 0 or len(doc_bow[0]) == 0:
@@ -229,28 +244,29 @@ class SHDPWrapper(BaseModel):
                 if word not in self.vector_map.columns:
                     missing.append(word)
                     continue
-                bow_vectors.append((self.vector_map[word].values, count))
-                words.append(word)
+                vector = self.vector_map[word].values
 
-            if missing:
-                logging.warn(f'Did not find vectors for: {", ".join(missing)}')
+                if vector.shape[0] == 0:
+                    continue
+                bow_vectors.append((vector, count))
+                words.append(word)
 
             if update_words:
                 self.__words.append(np.array(words))
 
             output = (np.array(bow_vectors), i)
-            if self.batch_size == 1 or skip_batch:
-                yield output, N
-                continue
+            if len(output) > 0:
+                if self.batch_size == 1 or skip_batch:
+                    yield output, N
+                    continue
 
-            batch.append(output)
-            if i == N - 1:
-                pass
-            elif len(batch) < self.batch_size:
+                batch.append(output)
+                if i == N - 1:
+                    pass
+                elif len(batch) < self.batch_size:
+                    continue
+            else:
                 continue
-
-            if self.batch_shuffle:
-                np.random.shuffle(batch)
 
             yield batch, N
             batch = []
@@ -305,8 +321,9 @@ def document_topics(model, corpora):
     """
     dfs = []
     for c in corpora.corpus:
+        bow = [d for d, _ in corpora[c.path]]
         try:
-            topics = model.transform(corpora[c.path])
+            topics = model.transform(bow)
         except MemoryError as e:
             print(c.path)
             raise e
