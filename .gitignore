@@ -103,5 +103,42 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+# Resources
+*.xml
+data/
+resources/
+
 # IDE
 *.vscode
+
+#LaTeX
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.glg
+*.glo
+*.gls
+*.ist
+*.lof
+*.lol
+*.lot
+*.out
+*.gz
+*.toc
+*.xmpi
+*.fdb_latexmk
+*.fls
+
+# Model files
+*.npy
+*lda_nips*
+*lda_cvpr*
+
+# Results and other data files
+*.txt
+*.csv
+*.png
+
+#3rd-party repos & tools
+detector/sHDP
