@@ -68,7 +68,7 @@ class Corpora(Loader):
                  iterator : str='token', parsing : str='simple',
                  word_up_limit : float=0.75, word_low_limit : int=20,
                  dictionary : str=None, shuffle : bool=False, seed : int=42,
-                 document_minimum_length : int=5):
+                 document_minimum_length : int=5, stopwords : str=None):
 
         iter_map = dict(
             token=self.tokenize,
@@ -79,10 +79,16 @@ class Corpora(Loader):
 
         self.word_low_limit = word_low_limit
         self.word_up_limit = word_up_limit
+
+        if stopwords:
+            self.stopwords = [w.strip() for w in open(stopwords).readlines()]
+
         if not dictionary:
             self.dictionary = Dictionary()
         else:
             self.dictionary = Dictionary.load_from_text(dictionary)
+            if self.stopwords:
+                self.dictionary.filter_tokens(bad_ids=self.dictionary.doc2idx(self.stopwords))
             self.is_built = True
 
         self.shuffle = shuffle
@@ -252,6 +258,7 @@ class Corpora(Loader):
         else:
             indices = range(len(iterable))
         return indices
+
 
 class Corpus:
     """

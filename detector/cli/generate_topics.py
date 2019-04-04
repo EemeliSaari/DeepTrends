@@ -8,8 +8,6 @@ import click
 sys.path.append('..')
 sys.path.append('../sHDP/')
 
-print(sys.path)
-
 from corpora import Corpora
 from pipeline.embeddings import Word2VecWrapper, load_vectors
 from pipeline.topics import (LDAWrapper, SHDPWrapper, document_topics,
@@ -19,19 +17,21 @@ from pipeline.topics import (LDAWrapper, SHDPWrapper, document_topics,
 @click.command()
 @click.option('--model', type=str)
 @click.option('--alpha')
+@click.option('--gamma', type=float)
 @click.option('--n_topics', type=int, default=50)
 @click.option('--data_path', type=str)
 @click.option('--data_prefix', type=str)
 @click.option('--result_path', type=str, default='')
 @click.option('--dictionary_path', type=str, default='')
+@click.option('--stopwords', type=str)
 @click.option('--vectors_path', type=str)
 @click.option('--batch_size', type=int, default=10)
 @click.option('--iterations', type=int, default=500)
 @click.option('--passes', type=int, default=1)
 @click.option('--n_words', type=int, default=15)
 @click.option('--shuffle', '-s', is_flag=True)
-def main(model, alpha, n_topics, data_path, data_prefix, result_path, dictionary_path, 
-         vectors_path, batch_size, iterations, passes, n_words, shuffle):
+def main(model, alpha, gamma, n_topics, data_path, data_prefix, result_path, dictionary_path, 
+         stopwords, vectors_path, batch_size, iterations, passes, n_words, shuffle):
 
     if not os.path.exists(result_path):
         raise OSError(f'Provided path {result_path} does not exist.')
@@ -39,7 +39,8 @@ def main(model, alpha, n_topics, data_path, data_prefix, result_path, dictionary
     corpora_params = dict(
         data_path=data_path,
         prefix=data_prefix,
-        iterator='bow'
+        iterator='bow',
+        stopwords=stopwords
     )
 
     if os.path.exists(dictionary_path):
@@ -65,6 +66,8 @@ def main(model, alpha, n_topics, data_path, data_prefix, result_path, dictionary
         shdp=(SHDPWrapper,
             dict(
                 n_topics=n_topics,
+                alpha=alpha,
+                gamma=gamma,
                 passes=passes,
                 batch_size=batch_size,
                 batch_shuffle=shuffle,
@@ -78,6 +81,10 @@ def main(model, alpha, n_topics, data_path, data_prefix, result_path, dictionary
     topic_model = model_class(**params)
 
     data = [doc for doc, _ in corpora] # Gather the data since BOW reprecentation is lightweight.
+    for i, seq in enumerate(data):
+        if len(seq) < 1:
+            raise AssertionError(f'Empty seq at index {i}')
+
     topic_model.fit(data)
 
     model_name = str(topic_model) + f'_{data_prefix}'
