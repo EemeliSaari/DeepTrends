@@ -82,6 +82,8 @@ class Corpora(Loader):
 
         if stopwords:
             self.stopwords = [w.strip() for w in open(stopwords).readlines()]
+        else:
+            self.stopwords = []
 
         if not dictionary:
             self.dictionary = Dictionary()
