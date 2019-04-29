@@ -11,6 +11,7 @@ from scipy.ndimage.filters import gaussian_filter1d
 sys.path.append('..')
 
 from utils.topic_dists import dists_over_years
+from visualization.latexify import format_axes
 
 
 register_matplotlib_converters()
@@ -22,7 +23,8 @@ def topic_dist_per_year(df, path : str=None, display : bool=False,
     axis = pd.to_datetime(years, format='%Y')
 
     for i in range(dists.shape[1]):
-        plt.figure(figsize=(20,5))
+        ax = plt.subplot(111)
+        ax.grid(linestyle='-.', color='lightgray')
 
         original = dists[:, i]
         if smooth_method == 'gauss':
@@ -33,12 +35,13 @@ def topic_dist_per_year(df, path : str=None, display : bool=False,
         else:
             raise ValueError(f'Got unknown smoothing method: {smooth_method}')
 
-        plt.plot(axis, smooth)
-        plt.fill_between(axis, smooth, smooth-(smooth-original), alpha=0.3)
+        ax.plot(axis, smooth, linewidth=0.8, c='darkorange')
+        ax.fill_between(axis, smooth, smooth-(smooth-original), alpha=0.3, color='darkorange')
+        ax.set_facecolor('white')
 
-        plt.title(f'Topic {i} from year {years[0]}-{years[-1]}')
+        format_axes(ax)
         if path:
-            plt.savefig(os.path.join(path, f'topic{i}_dist_per_topic_{smooth_method}.png'))
+            plt.savefig(os.path.join(path, f'topic{i}_dist_per_topic_{smooth_method}.pdf'))
         if display:
             plt.show()
         plt.clf()
@@ -62,11 +65,15 @@ def topic_regression(df, path : str=None, display : bool=False,
     dist_year_df.columns = [f'Topic-{i}' for i in range(n_topics)] + ['year']
 
     for i in range(n_topics):
-        plt.figure(figsize=(20,5))
-        seaborn.regplot('year', f'Topic-{i}', data=dist_year_df, order=3, truncate=truncate)
-        plt.title(f'Topic {i} regression from year {years[0]}-{years[-1]}')
+        ax = seaborn.regplot('year', f'Topic-{i}', data=dist_year_df, order=3, 
+        truncate=truncate)
+
+        ax.grid(linestyle='-.', color='lightgray')
+        ax.set_facecolor('white')
+
+        format_axes(ax)
         if path:
-            plt.savefig(os.path.join(path, f'topic{i}_dist_per_topic_{order}regression.png'))
+            plt.savefig(os.path.join(path, f'topic{i}_dist_per_topic_{order}regression.pdf'))
         if display:
             plt.show()
         plt.clf()
