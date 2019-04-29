@@ -6,6 +6,15 @@ extras_require = dict(
     shdp=['matplotlib']
 )
 
+packages = [
+    'deep_trends',
+    'deep_trends.cli',
+    'deep_trends.fetcher',
+    'deep_trends.mocks',
+    'deep_trends.pipeline',
+    'deep_trends.scorers'
+]
+
 setup(
     name='deep-trends',
     version='0.0.0a',
@@ -16,10 +25,7 @@ setup(
     license='GNU2',
     install_requires=open('requirements.txt').read().strip().split('\n'),
     extras_require=extras_require,
-    packages=['',
-              '',
-              '',
-              ''],
+    packages=packages,
     long_description=open('README.md').read(),
     entry_ponts='''
         [console_scripts]
