@@ -108,8 +108,6 @@ class SHDPWrapper(BaseModel):
         self.__num_docs = num_docs
         self.__seed = seed
 
-        print(self.__gamma)
-
         self.vector_map = vector_map
 
         if self.vector_map is None:
@@ -130,8 +128,6 @@ class SHDPWrapper(BaseModel):
         self._initialize_components()
 
         self.validate_parameters()
-
-        print(alpha, n_topics)
 
         super(SHDPWrapper, self).__init__(
             alpha=self.__alpha, 

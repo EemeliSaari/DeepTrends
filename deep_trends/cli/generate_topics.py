@@ -4,6 +4,7 @@ import sys
 import datetime
 
 import click
+import numpy as np
 
 sys.path.append('..')
 sys.path.append('../sHDP/')
@@ -18,6 +19,7 @@ from pipeline.topics import (LDAWrapper, SHDPWrapper, document_topics,
 @click.option('--model', type=str)
 @click.option('--alpha')
 @click.option('--gamma', type=float)
+@click.option('--kappa', type=float)
 @click.option('--n_topics', type=int, default=50)
 @click.option('--data_path', type=str)
 @click.option('--data_prefix', type=str)
@@ -30,7 +32,7 @@ from pipeline.topics import (LDAWrapper, SHDPWrapper, document_topics,
 @click.option('--passes', type=int, default=1)
 @click.option('--n_words', type=int, default=15)
 @click.option('--shuffle', '-s', is_flag=True)
-def main(model, alpha, gamma, n_topics, data_path, data_prefix, result_path, dictionary_path, 
+def main(model, alpha, gamma, kappa, n_topics, data_path, data_prefix, result_path, dictionary_path, 
          stopwords, vectors_path, batch_size, iterations, passes, n_words, shuffle):
 
     if not os.path.exists(result_path):
@@ -80,10 +82,14 @@ def main(model, alpha, gamma, n_topics, data_path, data_prefix, result_path, dic
     model_class, params = MAP[model]
     topic_model = model_class(**params)
 
+
     data = [doc for doc, _ in corpora] # Gather the data since BOW reprecentation is lightweight.
     for i, seq in enumerate(data):
         if len(seq) < 1:
             raise AssertionError(f'Empty seq at index {i}')
+
+    if shuffle:
+        np.random.shuffle(data)
 
     topic_model.fit(data)
 
@@ -111,10 +117,6 @@ def main(model, alpha, gamma, n_topics, data_path, data_prefix, result_path, dic
 
     topics_path = os.path.join(path_dir, 'topics.csv')
     words_path = os.path.join(path_dir, 'words.csv')
-
-    print(topic_df.head())
-    print(topic_df.tail())
-    print(topic_df['year'].unique())
 
     topic_df.to_csv(topics_path, index=False)
     words_df.to_csv(words_path, index=False)

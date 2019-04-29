@@ -10,14 +10,15 @@ from matplotlib import style
 
 from visualization.overall_distributions import distribution_per_topic, distribution_per_year
 from visualization.topic_trends import topic_dist_per_year, topic_regression
-
+from visualization.latexify import latexify
 
 @click.command()
 @click.option('--path', '-p', type=str)
 @click.option('--words', '-w', type=str)
 @click.option('--results', type=str)
 @click.option('--display', is_flag=True)
-def main(path, words, results, display):
+@click.option('--latex', is_flag=True)
+def main(path, words, results, display, latex):
 
     if path.endswith('.csv'):
         df = pd.read_csv(path)
@@ -27,7 +28,10 @@ def main(path, words, results, display):
         words_df = pd.read_csv(os.path.join(path, 'words.csv'))
 
     style.use('ggplot')
-    seaborn.set_style('whitegrid')
+    if not latex:    
+        seaborn.set_style('whitegrid')
+    else:
+        latexify()
 
     if not results:
         results = path
